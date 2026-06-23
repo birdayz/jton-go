@@ -30,9 +30,10 @@ const linearScanLimit = 16
 // NewObject returns an empty Object.
 func NewObject() *Object { return &Object{} }
 
-// newObjectCap returns an empty Object whose backing storage is pre-sized for n
-// members.
-func newObjectCap(n int) *Object { return &Object{members: make([]member, 0, n)} }
+// NewObjectCap returns an empty Object whose backing storage is pre-sized for n
+// members. Use it when the member count is known up front (e.g. building a row
+// from a fixed schema) to avoid reallocations.
+func NewObjectCap(n int) *Object { return &Object{members: make([]member, 0, n)} }
 
 // pushUnique appends a key/value pair without checking for duplicates. The
 // caller must guarantee the key is not already present. It is the hot path for

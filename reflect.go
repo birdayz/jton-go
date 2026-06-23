@@ -144,7 +144,7 @@ func encodeMap(rv reflect.Value) (any, error) {
 		pairs[i] = kv{ks, k}
 	}
 	sort.Slice(pairs, func(i, j int) bool { return pairs[i].s < pairs[j].s })
-	o := newObjectCap(len(pairs))
+	o := NewObjectCap(len(pairs))
 	for _, p := range pairs {
 		v, err := reflectEncode(rv.MapIndex(p.v))
 		if err != nil {
@@ -174,7 +174,7 @@ func mapKeyString(k reflect.Value) (string, error) {
 
 func encodeStruct(rv reflect.Value) (any, error) {
 	fields := cachedFields(rv.Type())
-	o := newObjectCap(len(fields))
+	o := NewObjectCap(len(fields))
 	for i := range fields {
 		f := &fields[i]
 		fv := fieldByIndex(rv, f.index)

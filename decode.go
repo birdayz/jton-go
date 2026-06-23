@@ -719,7 +719,7 @@ func (p *parser) parseHeaderKey() (string, error) {
 // header count is an error (matching the reference, which rejects it as
 // trailing content).
 func (p *parser) parseRow(headers []string, unique bool) (*Object, bool, error) {
-	o := newObjectCap(len(headers))
+	o := NewObjectCap(len(headers))
 	n := len(headers)
 	col := 0
 	fillNull := func(from int) {

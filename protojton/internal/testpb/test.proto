@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package testpb;
+
+option go_package = "github.com/birdayz/jton-go/protojton/internal/testpb";
+
+enum Color {
+  COLOR_UNSPECIFIED = 0;
+  RED = 1;
+  GREEN = 2;
+  BLUE = 3;
+}
+
+message Inner {
+  int32 id = 1;
+  string label = 2;
+}
+
+// AllTypes exercises every proto3 field shape: all scalar kinds, enum, nested
+// message, repeated scalar/message/enum, maps with scalar and message values
+// and scalar keys, and a oneof.
+message AllTypes {
+  bool b = 1;
+  int32 i32 = 2;
+  int64 i64 = 3;
+  uint32 u32 = 4;
+  uint64 u64 = 5;
+  sint32 s32 = 6;
+  sint64 s64 = 7;
+  fixed32 f32 = 8;
+  fixed64 f64 = 9;
+  sfixed32 sf32 = 10;
+  sfixed64 sf64 = 11;
+  float fl = 12;
+  double db = 13;
+  string str = 14;
+  bytes by = 15;
+  Color color = 16;
+  Inner inner = 17;
+  repeated int32 rep_i32 = 18;
+  repeated string rep_str = 19;
+  repeated Inner rep_inner = 20;
+  map<string, int32> map_si = 21;
+  map<int32, string> map_is = 22;
+  map<string, Inner> map_smsg = 23;
+  oneof choice {
+    string choice_str = 24;
+    int32 choice_int = 25;
+    Inner choice_msg = 26;
+  }
+  repeated Color rep_enum = 27;
+  optional int32 opt_i32 = 28; // explicit presence
+}
+
+// Row is an all-scalar message, the shape the Zen Grid is built for.
+message Row {
+  int64 id = 1;
+  string name = 2;
+  string dept = 3;
+  double score = 4;
+  bool active = 5;
+}
