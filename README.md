@@ -38,7 +38,7 @@ JTON is JSON plus four things:
 ## Usage
 
 ```go
-import "jton"
+import "github.com/birdayz/jton-go"
 
 // Loads: JTON or JSON into a Go value tree.
 v, _ := jton.Loads(`[2: id, name; 1, "Alice"; 2, "Bob" ]`)
@@ -61,6 +61,12 @@ s, _ = jton.Dumps([]Row{{1, "Alice"}, {2, "Bob"}})   // same Zen Grid
 var rows []Row
 jton.Unmarshal([]byte(s), &rows)
 ```
+
+Marshal and Unmarshal work on arbitrary Go values by reflection (json struct
+tags, embedded fields, maps, slices, []byte as base64, the Marshaler
+interfaces). They do not route through encoding/json. A slice of value structs
+streams straight to a Zen Grid with no intermediate tree, which is faster than
+encoding/json on the same data.
 
 ### Value model
 
@@ -101,6 +107,36 @@ go run ./cmd/jton --bare-strings --tab < data.json
 go run ./cmd/jton --hint zen_grid_rowcount
 ```
 
+## Protobuf
+
+`github.com/birdayz/jton-go/protojton` marshals protobuf messages to JTON and
+back. It is a separate Go module with its own go.mod, so the
+google.golang.org/protobuf dependency never reaches code that only imports the
+core. All the format logic stays in the core: protojton walks the message with
+protoreflect into a jton value tree and reuses the core serializer and parser.
+
+```go
+import "github.com/birdayz/jton-go/protojton"
+
+rows := []*pb.Row{ {Id: 1, Name: "Alice", Dept: "Eng", Score: 95},
+                   {Id: 2, Name: "Bob", Dept: "Mkt", Score: 87} }
+data, _ := protojton.MarshalList(rows, protojton.MarshalOptions{})
+// [2: id, name, dept, score, active; 1, "Alice", "Eng", 95.0, true; ... ]
+
+msgs, _ := protojton.UnmarshalList(data, func() proto.Message { return &pb.Row{} }, protojton.UnmarshalOptions{})
+```
+
+It covers every proto3 shape: all scalar kinds, enums (value name, or number
+with EnumsAsInts), nested messages, repeated scalar/message/enum, maps, oneof,
+optional presence, and bytes as base64. By default every implicit-presence field
+is emitted so a repeated message keeps a homogeneous schema for the Zen Grid;
+presence-tracked fields round-trip their unset state. Coverage is a full
+round-trip test of every field type, 3000 randomized round-trips, and a
+wire-bytes fuzz target.
+
+On 100 rows the Zen Grid is 37% smaller than summed protojson output (43% with
+bare strings), and marshal is faster than protojson with fewer allocations.
+
 ## Conformance
 
 `go test ./conformance` runs the real reference jton, the Rust core behind its
@@ -139,14 +175,28 @@ or marks them xfail.
 - Deeply nested input overflows the reference's recursive parser. Go returns an
   error.
 
+## Layout
+
+Two Go modules in one repo:
+
+- root, `github.com/birdayz/jton-go`: the core library and CLI. Standard library
+  only, no third-party dependencies.
+- `./protojton`: protobuf support, its own go.mod, depends on the core plus
+  google.golang.org/protobuf.
+
+A go.work ties them together for local development and for Bazel. The proto
+dependency stays out of the core module's graph: `go list -deps
+github.com/birdayz/jton-go | grep protobuf` is empty.
+
 ## Build
 
-go and Bazel both work. Bazel is bzlmod with rules_go and gazelle, set up the
-same way as fdb-record-layer-go.
+go and Bazel both build everything. Bazel is bzlmod with rules_go and gazelle,
+set up the same way as fdb-record-layer-go; gazelle reads go.work so both modules
+build from one workspace.
 
 ```sh
-go build ./...    && go test ./...
-bazel build //... && bazel test //...     # unit tests run, conformance skips without python
+go build ./... ./protojton/...   && go test ./... ./protojton/...
+bazel build //... && bazel test //...     # core + protojton; conformance skips without python
 bazel run  //:gazelle                     # regenerate BUILD files
 
 # conformance under Bazel, pointed at the venv:
@@ -170,13 +220,18 @@ ryu's pretty path). The parser parses integers without a string allocation,
 interns boxed ints 0..255, aliases the input bytes for float parsing instead of
 copying, and pre-sizes each row object from the header count.
 
+Marshal and Unmarshal of Go structs avoid the value tree: a slice of value
+structs streams to a Zen Grid through cached per-field encoders, cross-checked
+byte-for-byte against the tree path.
+
 Numbers for a 1000 row, 5 column table:
 
-| Op | time/op | allocs/op |
-|---|---|---|
-| Marshal to Zen Grid | ~0.37 ms | ~3.8k |
-| Parse Zen Grid | ~0.48 ms | ~7.8k |
-| Round trip | ~0.88 ms | ~12k |
+| Op | time/op | allocs/op | vs encoding/json |
+|---|---|---|---|
+| Marshal []struct to Zen Grid | ~0.24 ms | ~17 | faster (json ~0.28 ms) |
+| Unmarshal Zen Grid to []struct | ~0.84 ms | ~7.8k | faster (json ~1.4 ms) |
+| Parse Zen Grid to value tree | ~0.48 ms | ~7.8k | |
+| protojton marshal 1000 rows | ~1.0 ms | ~9.5k | faster than protojson |
 
 There is no SIMD structural index like the reference builds. This is a recursive
 descent parser, the AVX2 only lives in the leaf scans.
