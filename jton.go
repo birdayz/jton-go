@@ -3,7 +3,9 @@ package jton
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
+	"reflect"
 )
 
 // Loads parses a JTON/JSON string into a Go value, mirroring the reference
@@ -29,11 +31,12 @@ func DumpsOptions(v any, opts Options) (string, error) {
 	return string(b), nil
 }
 
-// Unmarshal parses JTON data into v. If v is *any, the canonical value tree is
-// stored directly (numbers as int64/*big.Int/float64, objects as *Object).
-// Otherwise the parsed tree is bridged through encoding/json into v, so structs,
-// maps, and slices decode as they would with the standard library (this path
-// cannot represent the Infinity/NaN literals and will error on them).
+// Unmarshal parses JTON data into v, which must be a non-nil pointer. If v is
+// *any, the canonical value tree is stored directly (numbers as
+// int64/*big.Int/float64, objects as *Object). Otherwise the parsed tree is
+// decoded into v by reflection (see reflect.go): structs (json tags, embedded
+// fields), maps, slices, []byte (base64), and the json/text Unmarshaler
+// interfaces are all supported, with no encoding/json round-trip.
 func Unmarshal(data []byte, v any) error {
 	parsed, err := Parse(data)
 	if err != nil {
@@ -43,11 +46,11 @@ func Unmarshal(data []byte, v any) error {
 		*pv = parsed
 		return nil
 	}
-	js, err := MarshalOptions(parsed, Options{NoZenGrid: true})
-	if err != nil {
-		return err
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
+		return fmt.Errorf("jton: Unmarshal target must be a non-nil pointer, got %T", v)
 	}
-	return json.Unmarshal(js, v)
+	return reflectDecode(parsed, rv.Elem())
 }
 
 // ToJSON converts a JTON document (which may use Zen Grid, comments, unquoted

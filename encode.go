@@ -68,11 +68,18 @@ func Marshal(v any) ([]byte, error) { return MarshalOptions(v, Options{}) }
 
 // MarshalOptions serializes v to JTON with the given options.
 func MarshalOptions(v any, opts Options) ([]byte, error) {
+	e := &encoder{opts: opts, buf: make([]byte, 0, 256)}
+	// Fast path: a slice of value structs streams straight to a Zen Grid with no
+	// value-tree and no boxing. Falls through untouched when not eligible.
+	if done, err := e.tryStructTable(v); err != nil {
+		return nil, err
+	} else if done {
+		return e.buf, nil
+	}
 	nv, _, err := normalize(v)
 	if err != nil {
 		return nil, err
 	}
-	e := &encoder{opts: opts, buf: make([]byte, 0, 256)}
 	if err := e.encode(nv, 0); err != nil {
 		return nil, err
 	}
@@ -214,22 +221,11 @@ func numberStringToCanonical(s string) any {
 	return s
 }
 
-// normalizeForeign converts structs, typed slices/maps, and pointers via a
-// JSON round-trip (preserving struct field order and json tags), then parses
-// the result back into the canonical tree.
+// normalizeForeign converts structs, typed slices/maps, and pointers directly
+// into the canonical tree by reflection (no encoding/json round-trip), honoring
+// json struct tags, omitempty, and the Marshaler interfaces. See reflect.go.
 func normalizeForeign(v any) (any, error) {
-	rv := reflect.ValueOf(v)
-	switch rv.Kind() {
-	case reflect.Pointer, reflect.Interface:
-		if rv.IsNil() {
-			return nil, nil
-		}
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	return Parse(b)
+	return reflectEncode(reflect.ValueOf(v))
 }
 
 // ── core encoder ───────────────────────────────────────────────────────────
@@ -455,7 +451,16 @@ func isSafeZenString(s string) bool {
 // ── Zen Grid serialization ─────────────────────────────────────────────────
 
 func (e *encoder) writeZenGrid(arr []any, headers []string, depth int) error {
-	nRows := len(arr)
+	return e.writeZenFrame(len(arr), headers, depth, func(i int) error {
+		return e.writeZenRow(arr[i], headers, depth)
+	})
+}
+
+// writeZenFrame writes the Zen Grid table structure (prefix, headers, row
+// framing, delimiters, multiline/indent variants) and calls writeRow(i) for
+// each of nRows rows at the correct position. It is shared by the value-tree
+// encoder and the direct struct-table encoder so the framing never diverges.
+func (e *encoder) writeZenFrame(nRows int, headers []string, depth int, writeRow func(i int) error) error {
 	sep := e.opts.Delimiter.sep()
 
 	if e.opts.MultilineZen {
@@ -473,10 +478,10 @@ func (e *encoder) writeZenGrid(arr []any, headers []string, depth int) error {
 			e.writeZenHeaderKey(h)
 		}
 		e.buf = append(e.buf, '}', ':')
-		for _, row := range arr {
+		for i := 0; i < nRows; i++ {
 			e.buf = append(e.buf, '\n')
 			e.writeIndent((depth + 1) * indentSize)
-			if err := e.writeZenRow(row, headers, depth); err != nil {
+			if err := writeRow(i); err != nil {
 				return err
 			}
 		}
@@ -497,10 +502,10 @@ func (e *encoder) writeZenGrid(arr []any, headers []string, depth int) error {
 			}
 			e.writeZenHeaderKey(h)
 		}
-		for _, row := range arr {
+		for i := 0; i < nRows; i++ {
 			e.buf = append(e.buf, '\n')
 			e.writeIndent((depth + 1) * w)
-			if err := e.writeZenRow(row, headers, depth); err != nil {
+			if err := writeRow(i); err != nil {
 				return err
 			}
 		}
@@ -521,9 +526,9 @@ func (e *encoder) writeZenGrid(arr []any, headers []string, depth int) error {
 		}
 		e.writeZenHeaderKey(h)
 	}
-	for _, row := range arr {
+	for i := 0; i < nRows; i++ {
 		e.buf = append(e.buf, ';', ' ')
-		if err := e.writeZenRow(row, headers, depth); err != nil {
+		if err := writeRow(i); err != nil {
 			return err
 		}
 	}
