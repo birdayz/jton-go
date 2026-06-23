@@ -3,9 +3,9 @@ load("@rules_go//go:def.bzl", "go_binary", "go_library")
 go_library(
     name = "jton_lib",
     srcs = ["main.go"],
-    importpath = "jton/cmd/jton",
+    importpath = "github.com/birdayz/jton-go/cmd/jton",
     visibility = ["//visibility:private"],
-    deps = ["//:jton"],
+    deps = ["//:jton-go"],
 )
 
 go_binary(

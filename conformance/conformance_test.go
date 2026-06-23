@@ -29,7 +29,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"jton"
+	"github.com/birdayz/jton-go"
 )
 
 // ── oracle subprocess ──────────────────────────────────────────────────────

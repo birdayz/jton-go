@@ -1,7 +1,7 @@
 load("@gazelle//:def.bzl", "gazelle")
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
-# gazelle:prefix jton
+# gazelle:prefix github.com/birdayz/jton-go
 gazelle(name = "gazelle")
 
 # JSONTestSuite reference vectors, shared with the conformance test.
@@ -12,7 +12,7 @@ filegroup(
 )
 
 go_library(
-    name = "jton",
+    name = "jton-go",
     srcs = [
         "decode.go",
         "doc.go",
@@ -27,13 +27,12 @@ go_library(
         "simd_generic.go",
         "value.go",
     ],
-    importpath = "jton",
+    importpath = "github.com/birdayz/jton-go",
     visibility = ["//visibility:public"],
 )
 
 go_test(
-    name = "jton_test",
-    size = "small",  # keep
+    name = "jton-go_test",
     srcs = [
         "benchmark_test.go",
         "jton_test.go",
@@ -44,5 +43,5 @@ go_test(
         "smoke_test.go",
     ],
     data = glob(["testdata/**"]),
-    embed = [":jton"],
+    embed = [":jton-go"],
 )

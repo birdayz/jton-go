@@ -15,7 +15,7 @@ import (
 	"io"
 	"os"
 
-	"jton"
+	"github.com/birdayz/jton-go"
 )
 
 const version = "1.0.3-go"
