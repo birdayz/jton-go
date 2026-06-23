@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"unsafe"
 )
 
 // Delimiter selects the separator used between Zen Grid header fields and row
@@ -610,40 +611,43 @@ const hexDigits = "0123456789abcdef"
 
 // writeQuoted writes s as a JSON string with the reference's escape set: ", \,
 // \n, \r, \t, \b, \f are short-escaped; other control bytes use \u00XX; all
-// other bytes (including raw UTF-8) pass through. No HTML escaping.
+// other bytes (including raw UTF-8) pass through. No HTML escaping. The scan for
+// the next byte needing an escape is AVX2-accelerated (escapeIndex); clean spans
+// are bulk-copied.
 func (e *encoder) writeQuoted(s string) {
 	e.buf = append(e.buf, '"')
-	start := 0
-	for i := 0; i < len(s); i++ {
-		b := s[i]
-		if b >= 0x20 && b != '"' && b != '\\' {
-			continue
+	if len(s) > 0 {
+		// Read-only byte view of s; escapeIndex never writes through it, and the
+		// spans we copy out are appended (copied) into e.buf.
+		b := unsafe.Slice(unsafe.StringData(s), len(s))
+		for len(b) > 0 {
+			j := escapeIndex(b)
+			if j > 0 {
+				e.buf = append(e.buf, b[:j]...)
+			}
+			if j == len(b) {
+				break
+			}
+			switch c := b[j]; c {
+			case '"':
+				e.buf = append(e.buf, '\\', '"')
+			case '\\':
+				e.buf = append(e.buf, '\\', '\\')
+			case '\n':
+				e.buf = append(e.buf, '\\', 'n')
+			case '\r':
+				e.buf = append(e.buf, '\\', 'r')
+			case '\t':
+				e.buf = append(e.buf, '\\', 't')
+			case '\b':
+				e.buf = append(e.buf, '\\', 'b')
+			case '\f':
+				e.buf = append(e.buf, '\\', 'f')
+			default:
+				e.buf = append(e.buf, '\\', 'u', '0', '0', hexDigits[c>>4], hexDigits[c&0xF])
+			}
+			b = b[j+1:]
 		}
-		if start < i {
-			e.buf = append(e.buf, s[start:i]...)
-		}
-		switch b {
-		case '"':
-			e.buf = append(e.buf, '\\', '"')
-		case '\\':
-			e.buf = append(e.buf, '\\', '\\')
-		case '\n':
-			e.buf = append(e.buf, '\\', 'n')
-		case '\r':
-			e.buf = append(e.buf, '\\', 'r')
-		case '\t':
-			e.buf = append(e.buf, '\\', 't')
-		case '\b':
-			e.buf = append(e.buf, '\\', 'b')
-		case '\f':
-			e.buf = append(e.buf, '\\', 'f')
-		default:
-			e.buf = append(e.buf, '\\', 'u', '0', '0', hexDigits[b>>4], hexDigits[b&0xF])
-		}
-		start = i + 1
-	}
-	if start < len(s) {
-		e.buf = append(e.buf, s[start:]...)
 	}
 	e.buf = append(e.buf, '"')
 }

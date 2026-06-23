@@ -30,6 +30,20 @@ const linearScanLimit = 16
 // NewObject returns an empty Object.
 func NewObject() *Object { return &Object{} }
 
+// newObjectCap returns an empty Object whose backing storage is pre-sized for n
+// members.
+func newObjectCap(n int) *Object { return &Object{members: make([]member, 0, n)} }
+
+// pushUnique appends a key/value pair without checking for duplicates. The
+// caller must guarantee the key is not already present. It is the hot path for
+// building Zen Grid rows, whose columns come from a known-unique header list.
+func (o *Object) pushUnique(key string, val any) {
+	o.members = append(o.members, member{key, val})
+	if o.index != nil {
+		o.index[key] = len(o.members) - 1
+	}
+}
+
 // Obj builds an Object from alternating key, value arguments. It panics if the
 // number of arguments is odd or a key is not a string. It is a convenience for
 // constructing literals in code and tests:
@@ -85,6 +99,16 @@ func (o *Object) buildIndex() {
 		if _, ok := o.index[o.members[i].key]; !ok {
 			o.index[o.members[i].key] = i
 		}
+	}
+}
+
+// setOrPush appends when unique is known up front (no duplicate-key scan),
+// otherwise falls back to the deduplicating Set.
+func (o *Object) setOrPush(key string, val any, unique bool) {
+	if unique {
+		o.pushUnique(key, val)
+	} else {
+		o.Set(key, val)
 	}
 }
 

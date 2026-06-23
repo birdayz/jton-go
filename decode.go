@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"unicode/utf16"
 	"unicode/utf8"
+	"unsafe"
 )
 
 // SyntaxError describes a JTON/JSON parse failure. It mirrors the reference
@@ -315,18 +316,23 @@ func (p *parser) numberFromToken(b []byte, off int) (any, error) {
 		return nil, p.errf(off, "invalid number")
 	}
 
-	s := string(b)
 	if !hasDot && !hasExp {
-		if v, err := strconv.ParseInt(s, 10, 64); err == nil {
+		// Manual int64 accumulation avoids a string allocation per integer; the
+		// token is already validated, so only an overflow needs the slow path.
+		if v, ok := parseInt64(b, neg); ok {
+			if v >= 0 && v < int64(len(smallInt)) {
+				return smallInt[v], nil // interned: no boxing allocation
+			}
 			return v, nil
 		}
-		bi, ok := new(big.Int).SetString(s, 10)
+		bi, ok := new(big.Int).SetString(string(b), 10)
 		if !ok {
 			return nil, p.errf(off, "invalid integer")
 		}
 		return bi, nil
 	}
-	v, err := strconv.ParseFloat(s, 64)
+	// Alias the token bytes as a string (read-only) to skip the copy.
+	v, err := strconv.ParseFloat(unsafe.String(unsafe.SliceData(b), len(b)), 64)
 	if err != nil {
 		// Out-of-range magnitudes are not errors: like the reference's
 		// lexical-core path, overflow yields ±Inf and underflow yields 0.
@@ -338,29 +344,61 @@ func (p *parser) numberFromToken(b []byte, off int) (any, error) {
 	return v, nil
 }
 
+// smallInt interns boxed int64 values 0..255, the common case for ids, counts,
+// and flags, so decoding them does not allocate a fresh interface box.
+var smallInt = func() [256]any {
+	var a [256]any
+	for i := range a {
+		a[i] = int64(i)
+	}
+	return a
+}()
+
+// parseInt64 parses a validated integer token (optional leading '-', then
+// digits) into an int64, reporting ok=false on overflow.
+func parseInt64(b []byte, neg bool) (int64, bool) {
+	i := 0
+	if neg {
+		i = 1
+	}
+	const cutoff = uint64(1) << 63
+	var u uint64
+	for ; i < len(b); i++ {
+		d := uint64(b[i] - '0')
+		if u > (math.MaxUint64-d)/10 {
+			return 0, false
+		}
+		u = u*10 + d
+	}
+	if neg {
+		if u > cutoff {
+			return 0, false
+		}
+		return -int64(u), true
+	}
+	if u >= cutoff {
+		return 0, false
+	}
+	return int64(u), true
+}
+
 // ── strings ────────────────────────────────────────────────────────────────
 
 func (p *parser) parseString() (string, error) {
 	in := p.data
 	p.pos++ // opening quote
 	start := p.pos
-	// Fast path: no escapes.
-	for p.pos < len(in) {
-		c := in[p.pos]
-		if c == '"' {
-			s := string(in[start:p.pos])
-			p.pos++
-			return s, nil
-		}
-		if c == '\\' {
-			break
-		}
-		p.pos++
-	}
+	// Fast path: AVX2-scan to the first '"' or '\'.
+	p.pos += scanStringBody(in[p.pos:])
 	if p.pos >= len(in) {
 		return "", p.errf(p.pos, "unterminated string")
 	}
-	// Slow path: copy what we have and decode escapes.
+	if in[p.pos] == '"' {
+		s := string(in[start:p.pos])
+		p.pos++
+		return s, nil
+	}
+	// Slow path: escapes present. Copy what we have and decode.
 	buf := p.scratch[:0]
 	buf = append(buf, in[start:p.pos]...)
 	for p.pos < len(in) {
@@ -422,8 +460,10 @@ func (p *parser) parseString() (string, error) {
 			}
 			p.pos++
 		default:
-			buf = append(buf, c)
-			p.pos++
+			// Bulk-copy the clean run up to the next '"' or '\'.
+			r := scanStringBody(in[p.pos:])
+			buf = append(buf, in[p.pos:p.pos+r]...)
+			p.pos += r
 		}
 	}
 	return "", p.errf(p.pos, "unterminated string")
@@ -594,6 +634,7 @@ func (p *parser) parseZenGrid() (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	unique := headersUnique(headers)
 	rows := []any{}
 	for {
 		p.skipWS()
@@ -604,7 +645,7 @@ func (p *parser) parseZenGrid() (any, error) {
 			p.pos++
 			break
 		}
-		row, ended, err := p.parseRow(headers)
+		row, ended, err := p.parseRow(headers, unique)
 		if err != nil {
 			return nil, err
 		}
@@ -677,10 +718,15 @@ func (p *parser) parseHeaderKey() (string, error) {
 // any error. Missing trailing cells become null; an extra cell beyond the
 // header count is an error (matching the reference, which rejects it as
 // trailing content).
-func (p *parser) parseRow(headers []string) (*Object, bool, error) {
-	o := NewObject()
+func (p *parser) parseRow(headers []string, unique bool) (*Object, bool, error) {
+	o := newObjectCap(len(headers))
 	n := len(headers)
 	col := 0
+	fillNull := func(from int) {
+		for j := from; j < n; j++ {
+			o.setOrPush(headers[j], nil, unique)
+		}
+	}
 	for {
 		p.skipSpacesOnly()
 		if p.pos >= len(p.data) {
@@ -688,16 +734,12 @@ func (p *parser) parseRow(headers []string) (*Object, bool, error) {
 		}
 		c := p.data[p.pos]
 		if c == ';' {
-			for j := col; j < n; j++ {
-				o.Set(headers[j], nil)
-			}
+			fillNull(col)
 			p.pos++
 			return o, false, nil
 		}
 		if c == ']' {
-			for j := col; j < n; j++ {
-				o.Set(headers[j], nil)
-			}
+			fillNull(col)
 			return o, true, nil
 		}
 		if col >= n {
@@ -707,7 +749,7 @@ func (p *parser) parseRow(headers []string) (*Object, bool, error) {
 		if err != nil {
 			return nil, false, err
 		}
-		o.Set(headers[col], val)
+		o.setOrPush(headers[col], val, unique)
 		col++
 		p.skipSpacesOnly()
 		if p.pos >= len(p.data) {
@@ -717,20 +759,42 @@ func (p *parser) parseRow(headers []string) (*Object, bool, error) {
 		case ',', '\t', '|':
 			p.pos++
 		case ';':
-			for j := col; j < n; j++ {
-				o.Set(headers[j], nil)
-			}
+			fillNull(col)
 			p.pos++
 			return o, false, nil
 		case ']':
-			for j := col; j < n; j++ {
-				o.Set(headers[j], nil)
-			}
+			fillNull(col)
 			return o, true, nil
 		default:
 			return nil, false, p.errf(p.pos, "expected ',', ';' or ']' in Zen Grid row")
 		}
 	}
+}
+
+// headersUnique reports whether all header names are distinct, so rows can be
+// built with the no-dedup pushUnique fast path.
+func headersUnique(h []string) bool {
+	if len(h) < 2 {
+		return true
+	}
+	if len(h) <= 8 {
+		for i := 0; i < len(h); i++ {
+			for j := i + 1; j < len(h); j++ {
+				if h[i] == h[j] {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	seen := make(map[string]struct{}, len(h))
+	for _, k := range h {
+		if _, ok := seen[k]; ok {
+			return false
+		}
+		seen[k] = struct{}{}
+	}
+	return true
 }
 
 // parseCellValue parses a single Zen Grid cell. A cell beginning with a JSON

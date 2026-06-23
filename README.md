@@ -157,11 +157,29 @@ bazel test //conformance:conformance_test \
 
 ## Performance
 
-The parser is a single pass and scalar. No SIMD. That is a Rust micro
-optimization and it is not idiomatic in Go. The serializer skips the copy when
-the tree is already canonical and writes floats straight into the output buffer.
-For a 1000 row, 5 column table, Marshal is around 0.37 ms and Parse around
-0.74 ms.
+The two hot byte scans are AVX2. The serializer's "find the next byte that needs
+escaping" and the parser's "find the end of this string" both run 32 bytes at a
+time, hand-written in Plan9 assembly (`simd_amd64.s`) with a scalar fallback and
+runtime CPUID detection. On clean text the escape scan does about 42 GB/s
+against 2 GB/s for the byte loop. Short strings stay scalar. The AVX2 path only
+starts at 32 bytes, below that the setup costs more than the scan saves.
+
+The rest is allocation work. The serializer does not copy the tree when it is
+already canonical, and formats floats straight into the output buffer (a port of
+ryu's pretty path). The parser parses integers without a string allocation,
+interns boxed ints 0..255, aliases the input bytes for float parsing instead of
+copying, and pre-sizes each row object from the header count.
+
+Numbers for a 1000 row, 5 column table:
+
+| Op | time/op | allocs/op |
+|---|---|---|
+| Marshal to Zen Grid | ~0.37 ms | ~3.8k |
+| Parse Zen Grid | ~0.48 ms | ~7.8k |
+| Round trip | ~0.88 ms | ~12k |
+
+There is no SIMD structural index like the reference builds. This is a recursive
+descent parser, the AVX2 only lives in the leaf scans.
 
 ## License
 
