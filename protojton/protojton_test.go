@@ -339,3 +339,85 @@ func BenchmarkUnmarshalRowsProtojton(b *testing.B) {
 		}
 	}
 }
+
+// FuzzProtoText fuzzes the generated decode path with arbitrary JTON text: it
+// must never panic, and any input it accepts must re-marshal and re-decode to an
+// equal message (decoder stability). DiscardUnknown lets more inputs reach the
+// per-field decoders and the convert.go type coercions.
+func FuzzProtoText(f *testing.F) {
+	for _, m := range []*testpb.AllTypes{fullAllTypes(), {}, {I32: 1}, {Str: "x"}} {
+		b, _ := protojton.Marshal(m)
+		f.Add(b)
+	}
+	for _, s := range []string{
+		`{i32: 5, str: "x", inner: {id: 1}}`,
+		`{"map_si":{"a":1},"rep_i32":[1,2,3]}`,
+		`{i32: "wrong type", b: 12}`, // type-mismatch cells must error, not panic
+		`{rep_inner: [{id:1},{id:2}]}`,
+		`[2: id, name; 1, a; 2, b ]`,
+		`{color: "RED", rep_enum: [1, "BLUE"]}`,
+		`{by: "aGVsbG8="}`,
+	} {
+		f.Add([]byte(s))
+	}
+	opts := protojton.UnmarshalOptions{DiscardUnknown: true}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		m := &testpb.AllTypes{}
+		if err := opts.Unmarshal(data, m); err != nil {
+			return // rejecting malformed JTON is fine
+		}
+		b2, err := protojton.Marshal(m)
+		if err != nil {
+			t.Fatalf("re-marshal after accepted decode: %v\ninput=%s", err, data)
+		}
+		m2 := &testpb.AllTypes{}
+		if err := opts.Unmarshal(b2, m2); err != nil {
+			t.Fatalf("re-unmarshal of our own output failed: %v\noutput=%s", err, b2)
+		}
+		if !proto.Equal(m, m2) {
+			t.Fatalf("decoder not stable\n input=%s\n re=%s\n m=%v\n m2=%v", data, b2, m, m2)
+		}
+	})
+}
+
+func randTree(rng *rand.Rand, depth int) *testpb.Tree {
+	t := &testpb.Tree{Value: rng.Int31n(1000)}
+	if depth > 0 {
+		for n := rng.Intn(4); n > 0; n-- {
+			t.Children = append(t.Children, randTree(rng, depth-1))
+		}
+		if rng.Intn(3) == 0 {
+			t.ParentLabel = randTree(rng, depth-1)
+		}
+	}
+	return t
+}
+
+// TestRecursiveTree round-trips self-recursive messages, exercising the
+// generated codec calling itself through arbitrary nesting.
+func TestRecursiveTree(t *testing.T) {
+	rng := rand.New(rand.NewSource(7))
+	for i := 0; i < 500; i++ {
+		in := randTree(rng, 5)
+		data, err := protojton.Marshal(in)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		out := &testpb.Tree{}
+		if err := protojton.Unmarshal(data, out); err != nil {
+			t.Fatalf("unmarshal %s: %v", data, err)
+		}
+		if !proto.Equal(in, out) {
+			t.Fatalf("tree mismatch\n jton=%s\n in=%v\nout=%v", data, in, out)
+		}
+	}
+	// empty message
+	e := &testpb.Empty{}
+	d, err := protojton.Marshal(e)
+	if err != nil || string(d) != "{}" {
+		t.Fatalf("empty marshal = %q, %v", d, err)
+	}
+	if err := protojton.Unmarshal([]byte("{}"), &testpb.Empty{}); err != nil {
+		t.Fatalf("empty unmarshal: %v", err)
+	}
+}

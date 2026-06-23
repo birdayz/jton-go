@@ -40,6 +40,7 @@ go_test(
     name = "jton-go_test",
     srcs = [
         "benchmark_test.go",
+        "fuzz_test.go",
         "jton_test.go",
         "marshal_reflect_test.go",
         "reflect_test.go",

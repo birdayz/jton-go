@@ -503,6 +503,104 @@ func (x *Row) GetActive() bool {
 	return false
 }
 
+// Tree is self-recursive: it exercises the generator emitting a codec that calls
+// itself (deep nesting in both marshal and unmarshal). Empty has no fields.
+type Tree struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Value         int32                  `protobuf:"varint,1,opt,name=value,proto3" json:"value,omitempty"`
+	Children      []*Tree                `protobuf:"bytes,2,rep,name=children,proto3" json:"children,omitempty"`
+	ParentLabel   *Tree                  `protobuf:"bytes,3,opt,name=parent_label,json=parentLabel,proto3" json:"parent_label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Tree) Reset() {
+	*x = Tree{}
+	mi := &file_test_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Tree) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Tree) ProtoMessage() {}
+
+func (x *Tree) ProtoReflect() protoreflect.Message {
+	mi := &file_test_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Tree.ProtoReflect.Descriptor instead.
+func (*Tree) Descriptor() ([]byte, []int) {
+	return file_test_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Tree) GetValue() int32 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
+func (x *Tree) GetChildren() []*Tree {
+	if x != nil {
+		return x.Children
+	}
+	return nil
+}
+
+func (x *Tree) GetParentLabel() *Tree {
+	if x != nil {
+		return x.ParentLabel
+	}
+	return nil
+}
+
+type Empty struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Empty) Reset() {
+	*x = Empty{}
+	mi := &file_test_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Empty) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Empty) ProtoMessage() {}
+
+func (x *Empty) ProtoReflect() protoreflect.Message {
+	mi := &file_test_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Empty.ProtoReflect.Descriptor instead.
+func (*Empty) Descriptor() ([]byte, []int) {
+	return file_test_proto_rawDescGZIP(), []int{4}
+}
+
 var File_test_proto protoreflect.FileDescriptor
 
 const file_test_proto_rawDesc = "" +
@@ -564,7 +662,12 @@ const file_test_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04dept\x18\x03 \x01(\tR\x04dept\x12\x14\n" +
 	"\x05score\x18\x04 \x01(\x01R\x05score\x12\x16\n" +
-	"\x06active\x18\x05 \x01(\bR\x06active*<\n" +
+	"\x06active\x18\x05 \x01(\bR\x06active\"w\n" +
+	"\x04Tree\x12\x14\n" +
+	"\x05value\x18\x01 \x01(\x05R\x05value\x12(\n" +
+	"\bchildren\x18\x02 \x03(\v2\f.testpb.TreeR\bchildren\x12/\n" +
+	"\fparent_label\x18\x03 \x01(\v2\f.testpb.TreeR\vparentLabel\"\a\n" +
+	"\x05Empty*<\n" +
 	"\x05Color\x12\x15\n" +
 	"\x11COLOR_UNSPECIFIED\x10\x00\x12\a\n" +
 	"\x03RED\x10\x01\x12\t\n" +
@@ -584,31 +687,35 @@ func file_test_proto_rawDescGZIP() []byte {
 }
 
 var file_test_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_test_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_test_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_test_proto_goTypes = []any{
 	(Color)(0),       // 0: testpb.Color
 	(*Inner)(nil),    // 1: testpb.Inner
 	(*AllTypes)(nil), // 2: testpb.AllTypes
 	(*Row)(nil),      // 3: testpb.Row
-	nil,              // 4: testpb.AllTypes.MapSiEntry
-	nil,              // 5: testpb.AllTypes.MapIsEntry
-	nil,              // 6: testpb.AllTypes.MapSmsgEntry
+	(*Tree)(nil),     // 4: testpb.Tree
+	(*Empty)(nil),    // 5: testpb.Empty
+	nil,              // 6: testpb.AllTypes.MapSiEntry
+	nil,              // 7: testpb.AllTypes.MapIsEntry
+	nil,              // 8: testpb.AllTypes.MapSmsgEntry
 }
 var file_test_proto_depIdxs = []int32{
-	0, // 0: testpb.AllTypes.color:type_name -> testpb.Color
-	1, // 1: testpb.AllTypes.inner:type_name -> testpb.Inner
-	1, // 2: testpb.AllTypes.rep_inner:type_name -> testpb.Inner
-	4, // 3: testpb.AllTypes.map_si:type_name -> testpb.AllTypes.MapSiEntry
-	5, // 4: testpb.AllTypes.map_is:type_name -> testpb.AllTypes.MapIsEntry
-	6, // 5: testpb.AllTypes.map_smsg:type_name -> testpb.AllTypes.MapSmsgEntry
-	1, // 6: testpb.AllTypes.choice_msg:type_name -> testpb.Inner
-	0, // 7: testpb.AllTypes.rep_enum:type_name -> testpb.Color
-	1, // 8: testpb.AllTypes.MapSmsgEntry.value:type_name -> testpb.Inner
-	9, // [9:9] is the sub-list for method output_type
-	9, // [9:9] is the sub-list for method input_type
-	9, // [9:9] is the sub-list for extension type_name
-	9, // [9:9] is the sub-list for extension extendee
-	0, // [0:9] is the sub-list for field type_name
+	0,  // 0: testpb.AllTypes.color:type_name -> testpb.Color
+	1,  // 1: testpb.AllTypes.inner:type_name -> testpb.Inner
+	1,  // 2: testpb.AllTypes.rep_inner:type_name -> testpb.Inner
+	6,  // 3: testpb.AllTypes.map_si:type_name -> testpb.AllTypes.MapSiEntry
+	7,  // 4: testpb.AllTypes.map_is:type_name -> testpb.AllTypes.MapIsEntry
+	8,  // 5: testpb.AllTypes.map_smsg:type_name -> testpb.AllTypes.MapSmsgEntry
+	1,  // 6: testpb.AllTypes.choice_msg:type_name -> testpb.Inner
+	0,  // 7: testpb.AllTypes.rep_enum:type_name -> testpb.Color
+	4,  // 8: testpb.Tree.children:type_name -> testpb.Tree
+	4,  // 9: testpb.Tree.parent_label:type_name -> testpb.Tree
+	1,  // 10: testpb.AllTypes.MapSmsgEntry.value:type_name -> testpb.Inner
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_test_proto_init() }
@@ -627,7 +734,7 @@ func file_test_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_test_proto_rawDesc), len(file_test_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

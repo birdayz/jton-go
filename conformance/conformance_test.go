@@ -492,3 +492,181 @@ func TestReferenceVectorsConformance(t *testing.T) {
 	}
 	t.Logf("reference vectors checked: %d/%d", checked, len(files))
 }
+
+// ── randomized differential against the reference ───────────────────────────
+
+func randString(rng *rand.Rand) string {
+	alpha := []rune("abc XYZ_0 \"\\,;:|[]{}\n\t é世界😀/-")
+	n := rng.Intn(10)
+	r := make([]rune, n)
+	for i := range r {
+		r[i] = alpha[rng.Intn(len(alpha))]
+	}
+	return string(r)
+}
+
+func randScalar(rng *rand.Rand) any {
+	switch rng.Intn(7) {
+	case 0:
+		return nil
+	case 1:
+		return rng.Intn(2) == 0
+	case 2:
+		return rng.Intn(40000) - 20000
+	case 3:
+		f := rng.NormFloat64() * pow10(rng.Intn(40)-20)
+		if f != f || f-f != 0 { // NaN/Inf can't be JSON-encoded for the dumps oracle
+			return 0
+		}
+		return f
+	case 4, 5:
+		return randString(rng)
+	default:
+		return json.Number(strconv.FormatInt(rng.Int63(), 10) + strconv.FormatInt(rng.Int63(), 10))
+	}
+}
+
+func pow10(e int) float64 {
+	p := 1.0
+	for i := 0; i < e; i++ {
+		p *= 10
+	}
+	for i := 0; i > e; i-- {
+		p /= 10
+	}
+	return p
+}
+
+// randKey returns a random object key. When safe is set, the key contains no
+// JTON-structural characters, so if it becomes a quoted Zen Grid header the
+// reference parser can read it back. (With safe=false the key may contain
+// structural chars, which the reference's dumps emits but its loads cannot parse
+// back — a reference dumps/loads asymmetry; see TestZenGridStructuralHeader in
+// the core package. Go round-trips both.)
+func randKey(rng *rand.Rand, safe bool) string {
+	if rng.Intn(4) == 0 {
+		if safe {
+			alpha := []rune("abc XYZ_0 é世界😀-/.")
+			n := rng.Intn(8)
+			r := make([]rune, n)
+			for i := range r {
+				r[i] = alpha[rng.Intn(len(alpha))]
+			}
+			return string(r)
+		}
+		return randString(rng) // non-identifier keys exercise quoting
+	}
+	const id = "abcdefghij_"
+	n := 1 + rng.Intn(6)
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = id[rng.Intn(len(id))]
+	}
+	return string(b)
+}
+
+func randValue(rng *rand.Rand, depth int, safeKeys bool) any {
+	if depth <= 0 || rng.Intn(3) == 0 {
+		return randScalar(rng)
+	}
+	switch rng.Intn(3) {
+	case 0:
+		o := map[string]any{}
+		for n := rng.Intn(5); n > 0; n-- {
+			o[randKey(rng, safeKeys)] = randValue(rng, depth-1, safeKeys)
+		}
+		return o
+	case 1:
+		// Homogeneous array of scalar-celled objects: a Zen Grid candidate.
+		cols := 1 + rng.Intn(4)
+		keys := make([]string, cols)
+		for i := range keys {
+			keys[i] = randKey(rng, safeKeys)
+		}
+		rows := 2 + rng.Intn(6)
+		arr := make([]any, rows)
+		for r := range arr {
+			m := map[string]any{}
+			for _, k := range keys {
+				m[k] = randScalar(rng)
+			}
+			arr[r] = m
+		}
+		return arr
+	default:
+		var arr []any
+		for n := rng.Intn(5); n > 0; n-- {
+			arr = append(arr, randValue(rng, depth-1, safeKeys))
+		}
+		if arr == nil {
+			arr = []any{}
+		}
+		return arr
+	}
+}
+
+// TestDumpsRandomConformance checks that for thousands of random values, across
+// every option combination, the Go serializer matches the reference byte-for-byte.
+func TestDumpsRandomConformance(t *testing.T) {
+	o := startOracle(t)
+	rng := rand.New(rand.NewSource(0x5EED))
+	mats := optMatrix()
+	mism := 0
+	for iter := 0; iter < 2500; iter++ {
+		val := randValue(rng, 4, false)
+		text, err := json.Marshal(val)
+		if err != nil {
+			continue
+		}
+		goVal, gerr := jton.Parse(text)
+		if gerr != nil {
+			t.Fatalf("Go cannot parse JSON it should accept: %v\n%s", gerr, text)
+		}
+		for _, oc := range mats {
+			resp := o.call(t, request{Op: "dumps", B64: b64(text), Opts: optsToPy(oc.opts)})
+			got, err := jton.MarshalOptions(goVal, oc.opts)
+			if !resp.OK {
+				if err == nil {
+					t.Errorf("[%s] reference errored (%s) but Go produced %q\ninput=%s", oc.name, resp.Err, got, text)
+				}
+				continue
+			}
+			if err != nil {
+				t.Errorf("[%s] Go errored %v; reference produced %q\ninput=%s", oc.name, err, resp.Out, text)
+				continue
+			}
+			if string(got) != resp.Out {
+				mism++
+				if mism <= 30 {
+					t.Errorf("[%s] dumps mismatch\n input=%s\n go =%q\n ref=%q", oc.name, text, got, resp.Out)
+				}
+			}
+		}
+	}
+	if mism > 30 {
+		t.Errorf("... and %d more dumps mismatches", mism-30)
+	}
+}
+
+// TestLoadsRandomConformance round-trips random values through the JTON format
+// (including Zen Grids) and checks loads agrees with the reference.
+func TestLoadsRandomConformance(t *testing.T) {
+	o := startOracle(t)
+	rng := rand.New(rand.NewSource(0xD00D))
+	for iter := 0; iter < 2500; iter++ {
+		val := randValue(rng, 4, true)
+		text, err := json.Marshal(val)
+		if err != nil {
+			continue
+		}
+		goVal, err := jton.Parse(text)
+		if err != nil {
+			continue
+		}
+		jt, err := jton.Marshal(goVal) // canonical JTON, includes Zen Grids
+		if err != nil {
+			t.Fatalf("Go marshal failed: %v", err)
+		}
+		checkLoads(t, o, jt, "random-loads")
+	}
+}

@@ -509,3 +509,21 @@ func TestMarshalStruct(t *testing.T) {
 		t.Errorf("Marshal []struct = %q, want %q", got, want)
 	}
 }
+
+// TestZenGridStructuralHeader guards a case the reference gets wrong: a Zen Grid
+// header (object key) containing a structural character. The reference's dumps
+// emits it but its SIMD-index loads cannot read it back; our recursive-descent
+// parser round-trips it correctly.
+func TestZenGridStructuralHeader(t *testing.T) {
+	for _, key := range []string{"a]b", "x;y", "p,q", "{z}", "a:b", `q"r`} {
+		v := []any{Obj(key, int64(1)), Obj(key, int64(2))}
+		d := mustDump(t, v)
+		if !isZenGrid(d) {
+			t.Errorf("expected zen grid for key %q, got %q", key, d)
+		}
+		back := mustLoad(t, d)
+		if !eqVal(back, v) {
+			t.Errorf("round-trip failed for key %q: %q -> %#v", key, d, back)
+		}
+	}
+}

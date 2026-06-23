@@ -60,3 +60,13 @@ message Row {
   double score = 4;
   bool active = 5;
 }
+
+// Tree is self-recursive: it exercises the generator emitting a codec that calls
+// itself (deep nesting in both marshal and unmarshal). Empty has no fields.
+message Tree {
+  int32 value = 1;
+  repeated Tree children = 2;
+  Tree parent_label = 3;
+}
+
+message Empty {}

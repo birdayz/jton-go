@@ -594,3 +594,98 @@ func (x *Row) UnmarshalJTON(v any, o protojton.UnmarshalOptions) error {
 	}
 	return nil
 }
+
+// MarshalJTONObject writes x as a JTON object.
+func (x *Tree) MarshalJTONObject(w *jton_go.Writer, o protojton.MarshalOptions) {
+	w.BeginObject()
+	if !o.OmitDefaults || x.Value != 0 {
+		w.Field("value")
+		w.Int(int64(x.Value))
+	}
+	if !o.OmitDefaults || len(x.Children) > 0 {
+		w.Field("children")
+		w.BeginArray()
+		for _, e := range x.Children {
+			e.MarshalJTONObject(w, o)
+		}
+		w.EndArray()
+	}
+	if x.ParentLabel != nil {
+		w.Field(protojton.PickName(o, "parent_label", "parentLabel"))
+		x.ParentLabel.MarshalJTONObject(w, o)
+	}
+	w.EndObject()
+}
+
+// UnmarshalJTON populates x from a parsed JTON value.
+func (x *Tree) UnmarshalJTON(v any, o protojton.UnmarshalOptions) error {
+	obj, err := protojton.AsObject(v)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < obj.Len(); i++ {
+		k, fv := obj.At(i)
+		if fv == nil {
+			continue
+		}
+		switch k {
+		case "value":
+			val, err := protojton.AsInt32(fv)
+			if err != nil {
+				return err
+			}
+			x.Value = val
+		case "children":
+			arr, err := protojton.AsArray(fv)
+			if err != nil {
+				return err
+			}
+			for _, e := range arr {
+				m := &Tree{}
+				if err := m.UnmarshalJTON(e, o); err != nil {
+					return err
+				}
+				x.Children = append(x.Children, m)
+			}
+		case "parent_label", "parentLabel":
+			if x.ParentLabel == nil {
+				x.ParentLabel = &Tree{}
+			}
+			if err := x.ParentLabel.UnmarshalJTON(fv, o); err != nil {
+				return err
+			}
+		default:
+			if !o.DiscardUnknown {
+				return fmt.Errorf("protojton: unknown field %q in Tree", k)
+			}
+		}
+	}
+	return nil
+}
+
+// MarshalJTONObject writes x as a JTON object.
+func (x *Empty) MarshalJTONObject(w *jton_go.Writer, o protojton.MarshalOptions) {
+	w.BeginObject()
+	w.EndObject()
+}
+
+// UnmarshalJTON populates x from a parsed JTON value.
+func (x *Empty) UnmarshalJTON(v any, o protojton.UnmarshalOptions) error {
+	obj, err := protojton.AsObject(v)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < obj.Len(); i++ {
+		k, fv := obj.At(i)
+		if fv == nil {
+			continue
+		}
+		switch k {
+		default:
+			if !o.DiscardUnknown {
+				return fmt.Errorf("protojton: unknown field %q in Empty", k)
+			}
+		}
+	}
+	return nil
+}
