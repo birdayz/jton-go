@@ -1,0 +1,26 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "protojton",
+    srcs = ["protojton.go"],
+    importpath = "github.com/birdayz/jton-go/protojton",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//:jton-go",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+    ],
+)
+
+go_test(
+    name = "protojton_test",
+    srcs = ["protojton_test.go"],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":protojton",
+        "//:jton-go",
+        "//protojton/internal/testpb",
+        "@org_golang_google_protobuf//encoding/protojson",
+        "@org_golang_google_protobuf//proto",
+    ],
+)

@@ -10,8 +10,10 @@ bazel_dep(name = "gazelle", version = "0.47.0")
 go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.from_file(go_mod = "//:go.mod")
 
-# The library and CLI depend only on the Go standard library, so the go_deps
-# extension has nothing to import; it is wired up so adding a dependency later is
-# a one-line change.
+# The core module depends only on the Go standard library. The separate
+# ./protojton module pulls in google.golang.org/protobuf; feeding both go.mod
+# files keeps the proto dependency confined to protojton at the Go level while
+# Bazel still builds everything from one workspace.
 go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
-go_deps.from_file(go_mod = "//:go.mod")
+go_deps.from_file(go_work = "//:go.work")
+use_repo(go_deps, "org_golang_google_protobuf")

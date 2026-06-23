@@ -2,6 +2,9 @@ load("@gazelle//:def.bzl", "gazelle")
 load("@rules_go//go:def.bzl", "go_library", "go_test")
 
 # gazelle:prefix github.com/birdayz/jton-go
+# The generated .pb.go is committed and built as ordinary Go, so no Bazel proto
+# toolchain is needed.
+# gazelle:proto disable_global
 gazelle(name = "gazelle")
 
 # JSONTestSuite reference vectors, shared with the conformance test.
