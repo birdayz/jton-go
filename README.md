@@ -112,8 +112,22 @@ go run ./cmd/jton --hint zen_grid_rowcount
 `github.com/birdayz/jton-go/protojton` marshals protobuf messages to JTON and
 back. It is a separate Go module with its own go.mod, so the
 google.golang.org/protobuf dependency never reaches code that only imports the
-core. All the format logic stays in the core: protojton walks the message with
-protoreflect into a jton value tree and reuses the core serializer and parser.
+core.
+
+The codec is generated, not reflective. `protoc-gen-jton` (in
+`./protojton/cmd/protoc-gen-jton`) emits a `MarshalJTON`/`UnmarshalJTON` per
+message that reads and writes Go struct fields directly and drives the core's
+streaming Writer. There is no protoreflect on the encode/decode path, which is
+why it is fast. The format logic still lives entirely in the core; the generated
+code just calls it.
+
+Generate alongside the .pb.go (buf, or protoc):
+
+```sh
+cd protojton/internal/testpb && buf generate
+# or: protoc --go_out=. --go_opt=paths=source_relative \
+#            --jton_out=. --jton_opt=paths=source_relative test.proto
+```
 
 ```go
 import "github.com/birdayz/jton-go/protojton"
@@ -130,12 +144,15 @@ It covers every proto3 shape: all scalar kinds, enums (value name, or number
 with EnumsAsInts), nested messages, repeated scalar/message/enum, maps, oneof,
 optional presence, and bytes as base64. By default every implicit-presence field
 is emitted so a repeated message keeps a homogeneous schema for the Zen Grid;
-presence-tracked fields round-trip their unset state. Coverage is a full
-round-trip test of every field type, 3000 randomized round-trips, and a
-wire-bytes fuzz target.
+presence-tracked fields round-trip their unset state. The runtime
+(`MarshalOptions`/`UnmarshalOptions`, the conversion helpers) is small; the
+generated code does the work. Coverage is a full round-trip of every field type,
+3000 randomized round-trips, and a wire-bytes fuzz target.
 
-On 100 rows the Zen Grid is 37% smaller than summed protojson output (43% with
-bare strings), and marshal is faster than protojson with fewer allocations.
+On a 1000-row table, marshal is ~0.20 ms / 20 allocs versus protojson's ~1.37 ms
+/ 14.7k allocs (about 6.7x faster), and the Zen Grid output is ~37% smaller than
+protojson (43% with bare strings). A message type with no generated codec
+returns a clear error pointing you at protoc-gen-jton.
 
 ## Conformance
 
@@ -182,7 +199,9 @@ Two Go modules in one repo:
 - root, `github.com/birdayz/jton-go`: the core library and CLI. Standard library
   only, no third-party dependencies.
 - `./protojton`: protobuf support, its own go.mod, depends on the core plus
-  google.golang.org/protobuf.
+  google.golang.org/protobuf. Contains the `protoc-gen-jton` plugin
+  (`./protojton/cmd/protoc-gen-jton`) and the small runtime its generated code
+  uses.
 
 A go.work ties them together for local development and for Bazel. The proto
 dependency stays out of the core module's graph: `go list -deps
