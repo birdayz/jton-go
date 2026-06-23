@@ -1,0 +1,13 @@
+# Don't inherit the shell environment into actions — hermetic by default.
+build --incompatible_strict_action_env
+
+test --test_output=errors
+test --test_summary=terse
+
+# The cross-language conformance test (//conformance) shells out to the reference
+# Python `jton`. Point it at an interpreter that can import jton; by default it
+# looks for <repo>/.venv/bin/python and skips cleanly if absent. Uncomment or
+# override on the command line to run it under Bazel:
+#   bazel test //conformance:conformance_test \
+#     --test_env=JTON_ORACLE_PYTHON=$PWD/.venv/bin/python
+test --test_env=JTON_ORACLE_PYTHON

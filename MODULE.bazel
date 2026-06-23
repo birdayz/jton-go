@@ -1,0 +1,17 @@
+module(
+    name = "jton-go",
+    version = "0.0.0",
+)
+
+# Go
+bazel_dep(name = "rules_go", version = "0.60.0")
+bazel_dep(name = "gazelle", version = "0.47.0")
+
+go_sdk = use_extension("@rules_go//go:extensions.bzl", "go_sdk")
+go_sdk.from_file(go_mod = "//:go.mod")
+
+# The library and CLI depend only on the Go standard library, so the go_deps
+# extension has nothing to import; it is wired up so adding a dependency later is
+# a one-line change.
+go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
+go_deps.from_file(go_mod = "//:go.mod")

@@ -1,0 +1,23 @@
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "conformance",
+    srcs = ["doc.go"],
+    importpath = "jton/conformance",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "conformance_test",
+    size = "medium",  # keep
+    srcs = ["conformance_test.go"],
+    # The reference vectors and the Python oracle are needed at runtime. The test
+    # skips cleanly unless JTON_ORACLE_PYTHON points at an interpreter with the
+    # reference `jton` installed, so it is safe under a plain `bazel test //...`.
+    data = [
+        "oracle.py",  # keep
+        "//:testdata",  # keep
+    ],  # keep
+    embed = [":conformance"],
+    deps = ["//:jton"],
+)

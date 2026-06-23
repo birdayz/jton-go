@@ -1,0 +1,38 @@
+load("@gazelle//:def.bzl", "gazelle")
+load("@rules_go//go:def.bzl", "go_library", "go_test")
+
+# gazelle:prefix jton
+gazelle(name = "gazelle")
+
+# JSONTestSuite reference vectors, shared with the conformance test.
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "jton",
+    srcs = [
+        "decode.go",
+        "doc.go",
+        "encode.go",
+        "jton.go",
+        "number.go",
+        "value.go",
+    ],
+    importpath = "jton",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "jton_test",
+    size = "small",  # keep
+    srcs = [
+        "benchmark_test.go",
+        "jton_test.go",
+        "smoke_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    embed = [":jton"],
+)

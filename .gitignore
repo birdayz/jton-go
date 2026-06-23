@@ -1,0 +1,13 @@
+# Python venv used only to build the reference conformance oracle
+/.venv/
+
+# Bazel convenience symlinks
+/bazel-bin
+/bazel-out
+/bazel-testlogs
+/bazel-jton-go
+
+# Build artifacts
+/dist/
+*.so
+__pycache__/
