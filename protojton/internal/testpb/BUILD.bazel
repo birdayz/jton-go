@@ -2,10 +2,15 @@ load("@rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "testpb",
-    srcs = ["test.pb.go"],
+    srcs = [
+        "test.pb.go",
+        "test.pb.jton.go",
+    ],
     importpath = "github.com/birdayz/jton-go/protojton/internal/testpb",
     visibility = ["//protojton:__subpackages__"],
     deps = [
+        "//:jton-go",
+        "//protojton",
         "@org_golang_google_protobuf//reflect/protoreflect",
         "@org_golang_google_protobuf//runtime/protoimpl",
     ],

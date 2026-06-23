@@ -1,0 +1,12 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "generator",
+    srcs = ["generator.go"],
+    importpath = "github.com/birdayz/jton-go/protojton/internal/generator",
+    visibility = ["//protojton:__subpackages__"],
+    deps = [
+        "@org_golang_google_protobuf//compiler/protogen",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+    ],
+)

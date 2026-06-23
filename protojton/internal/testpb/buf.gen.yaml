@@ -1,0 +1,15 @@
+# Regenerate the test fixtures: `cd protojton/internal/testpb && buf generate`
+# (or, without buf: protoc --go_out + protoc-gen-jton, see below).
+#
+#   protoc --go_out=. --go_opt=paths=source_relative \
+#          --jton_out=. --jton_opt=paths=source_relative test.proto
+#
+# protoc-gen-jton is built from ../../cmd/protoc-gen-jton.
+version: v2
+plugins:
+  - local: protoc-gen-go
+    out: .
+    opt: paths=source_relative
+  - local: ["go", "run", "github.com/birdayz/jton-go/protojton/cmd/protoc-gen-jton"]
+    out: .
+    opt: paths=source_relative
