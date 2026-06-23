@@ -130,6 +130,11 @@ func (e *encoder) tryStructTable(v any) (bool, error) {
 	if !e.structTableEligible(rv, plan, n) {
 		return false, nil
 	}
+	// Pre-size the output buffer from the row count, matching the protojton
+	// table path, so large tables don't pay repeated buffer-growth copies.
+	if hint := 64 + n*48; cap(e.buf) < hint {
+		e.buf = make([]byte, 0, hint)
+	}
 	err := e.writeZenFrame(n, plan.headers, 0, func(i int) error {
 		e.writeStructRow(rv.Index(i), plan)
 		return nil

@@ -438,6 +438,11 @@ func isScalarCell(v any) bool {
 	}
 }
 
+// SafeZenString reports whether s can appear unquoted-safe inside a Zen Grid,
+// i.e. it contains no structural characters. External codecs use it to mirror
+// the table-eligibility check when streaming.
+func SafeZenString(s string) bool { return isSafeZenString(s) }
+
 func isSafeZenString(s string) bool {
 	for i := 0; i < len(s); i++ {
 		switch s[i] {
